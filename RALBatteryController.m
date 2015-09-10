@@ -53,7 +53,10 @@ THE SOFTWARE.
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(accessoryDidDisconnectNotification:) name:EAAccessoryDidDisconnectNotification object:nil];
         
         [[EAAccessoryManager sharedAccessoryManager] registerForLocalNotifications];
-
+        if(!self.connected) for(EAAccessory *accessory in [[EAAccessoryManager sharedAccessoryManager] connectedAccessories])
+        {
+            [self accessoryDidConnectNotification:[NSNotification notificationWithName:EAAccessoryDidConnectNotification object:self userInfo:@{EAAccessoryKey:accessory}]];
+        }                                    
     }
     return self;
 }
