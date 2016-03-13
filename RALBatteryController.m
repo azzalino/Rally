@@ -23,16 +23,14 @@ THE SOFTWARE.
 */
 
 #import "RALBatteryController.h"
-#import <ExternalAccessory/ExternalAccessory.h>
 
 @interface RALBatteryController()<NSStreamDelegate>
 {
     BOOL _isCharging;
     BOOL _isConnected;
-    
 }
 
-@property (strong, nonatomic) EAAccessory *currentAccessory;
+
 @property (strong, nonatomic) EASession *session;
 
 @property (nonatomic, assign) NSStreamEvent event;
@@ -41,6 +39,7 @@ THE SOFTWARE.
 
 
 @implementation RALBatteryController
+@synthesize currentAccessory = _currentAccessory;
 
 #pragma mark - Lifecycle
 
@@ -68,10 +67,10 @@ THE SOFTWARE.
     [[EAAccessoryManager sharedAccessoryManager] unregisterForLocalNotifications];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidConnectNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidDisconnectNotification object:nil];
+    
     [self.session.outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
     
     [self.session.outputStream close];
-
 }
 
 
@@ -127,7 +126,9 @@ THE SOFTWARE.
     byteBuffer[0] = _isCharging ? 'c' : 'b';
     
     [self.session.outputStream write:byteBuffer maxLength:1];
+    [self willChangeValueForKey:@"charging"];
     _isCharging = on;
+    [self willChangeValueForKey:@"charging"];
     return YES;
 }
 
@@ -135,12 +136,15 @@ THE SOFTWARE.
 
 #pragma mark - Notifications
 
+
 - (void) accessoryDidConnectNotification : (NSNotification *) notification
 {
     EAAccessory *accessory = notification.userInfo[EAAccessoryKey];
     if ([[accessory.protocolStrings filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"%@ in self",@"com.rallypwr."]] count])
     {
-        self.currentAccessory = accessory;
+        [self willChangeValueForKey:@"currentAccessory"];
+        _currentAccessory = accessory;
+        [self didChangeValueForKey:@"currentAccessory"];
         self.session = [[EASession alloc] initWithAccessory:accessory forProtocol:accessory.protocolStrings[0]];
         
         if (self.session)
@@ -149,13 +153,19 @@ THE SOFTWARE.
             [self.session.outputStream scheduleInRunLoop:[NSRunLoop currentRunLoop]
                                                  forMode:NSDefaultRunLoopMode];
             self.session.outputStream.delegate = self;
+            [self willChangeValueForKey:@"connected"];
             _isConnected = YES;
+            [self didChangeValueForKey:@"connected"];
             [[NSNotificationCenter defaultCenter] postNotificationName:(NSString *)RALBatteryConnectedNotification object:self];
         }
         else
         {
-            self.currentAccessory = nil;
+           [self willChangeValueForKey:@"currentAccessory"];
+            _currentAccessory = nil;
+           [self didChangeValueForKey:@"currentAccessory"];
+           [self willChangeValueForKey:@"connected"];
             _isConnected = NO;
+           [self didChangeValueForKey:@"connected"];
         }
     }
 }
@@ -164,14 +174,21 @@ THE SOFTWARE.
 {
     if([notification.userInfo[EAAccessoryKey] isEqual:self.currentAccessory])
     {
-        self.currentAccessory = nil;
+        [self willChangeValueForKey:@"currentAccessory"];
+        _currentAccessory = nil;
+        [self didChangeValueForKey:@"currentAccessory"];
         [self.session.outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
         
         [self.session.outputStream close];
         
         self.session = nil;
+       [self willChangeValueForKey:@"connected"];
+       [self willChangeValueForKey:@"charging"];
         _isCharging = NO;
         _isConnected = NO;
+        [self didChangeValueForKey:@"connected"];
+        [self didChangeValueForKey:@"charging"];
+
         [[NSNotificationCenter defaultCenter] postNotificationName:(NSString *)RALBatteryDisconnectedNotification object:self];
     }
 }

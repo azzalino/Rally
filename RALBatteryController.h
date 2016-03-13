@@ -23,11 +23,12 @@ THE SOFTWARE.
 */
 
 #import <Foundation/Foundation.h>
+#import <ExternalAccessory/ExternalAccessory.h>
 
 /* The notifications are posted when battery is plugged in/out */
 
-static const NSString *RALBatteryConnectedNotification = @"RALBatteryConnectedNotification";
-static const NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconnectedNotification";
+static NSString *RALBatteryConnectedNotification = @"RALBatteryConnectedNotification";
+static NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconnectedNotification";
 
 
 @interface RALBatteryController : NSObject
@@ -52,5 +53,8 @@ static const NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconne
 
 /** Starts the manager. This should be run before any usage. It can be run many times, though. */
 - (void) start;
+
+/// Allows access to the current accessory details (e.g. serial number)
+@property (readonly) EAAccessory *currentAccessory;
 
 @end
