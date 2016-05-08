@@ -1,6 +1,6 @@
 /*  
 
-Copyright (c) 2015 PowerIT, Inc. Company
+Copyright (c) 2015-2016 PowerIT, Inc. Company
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,8 @@ static NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconnectedNo
 @property(nonatomic, readonly) BOOL connected;
 /// Boolean indicating if the battery is charging the device
 @property(nonatomic, readonly) BOOL charging;
+/// If this boolean is set to YES, The charger automatically begins charging as soon as it is plugged in. Use for applications that do not want to listen to connection notifications manually. Default value is NO.
+@property(nonatomic, assign) BOOL autoConnectMode;
 
 /** Starts charging the device
   * @return YES if all went ok, otherwise NO

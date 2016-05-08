@@ -28,6 +28,7 @@ THE SOFTWARE.
 {
     BOOL _isCharging;
     BOOL _isConnected;
+    BOOL _autoconnectMode;
 }
 
 
@@ -68,6 +69,8 @@ THE SOFTWARE.
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidConnectNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidDisconnectNotification object:nil];
     
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:RALBatteryConnectedNotification object:nil];
+    
     [self.session.outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
     
     [self.session.outputStream close];
@@ -76,6 +79,30 @@ THE SOFTWARE.
 
 
 #pragma mark - External interface
+
+
+- (void)setAutoConnectMode:(BOOL)autoConnectMode {
+    if(_autoConnectMode == autoConnectMode) return;
+    _autoConnectMode = autoConnectMode;
+    if (autoConnectMode) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(batteryDidConnectNotification:) name:RALBatteryConnectedNotification object:nil];
+        
+        if(!self.connected) for(EAAccessory *accessory in [[EAAccessoryManager sharedAccessoryManager] connectedAccessories])
+        {
+            [self accessoryDidConnectNotification:[NSNotification notificationWithName:EAAccessoryDidConnectNotification object:self userInfo:@{EAAccessoryKey:accessory}]];
+        }
+        else
+        {
+            [self startCharging];
+        }
+    }
+    else
+    {
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:RALBatteryConnectedNotification object:nil];
+        [self stopCharging];
+    }
+    
+}
 
 - (BOOL)connected
 {
@@ -200,6 +227,14 @@ THE SOFTWARE.
     self.event = eventCode;
 }
 
+
+#pragma mark - Notifications
+
+- (void) batteryDidConnectNotification: (NSNotification *) note
+{
+    [self startCharging];
+    
+}
 
 
 @end
