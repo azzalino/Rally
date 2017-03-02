@@ -44,6 +44,10 @@ THE SOFTWARE.
 
 #pragma mark - Lifecycle
 
+- (void)initialize {
+    /* Dummy method. The actual initialization is in the sharedController */
+}
+
 - (instancetype)init
 {
     self = [super init];
@@ -51,6 +55,12 @@ THE SOFTWARE.
     {
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(accessoryDidConnectNotification:) name:EAAccessoryDidConnectNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(accessoryDidDisconnectNotification:) name:EAAccessoryDidDisconnectNotification object:nil];
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillTerminateNotification:) name:UIApplicationWillTerminateNotification object:nil];
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidEnterBackgroundNotification:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+        
+        
         
         [[EAAccessoryManager sharedAccessoryManager] registerForLocalNotifications];
         if(!self.connected) for(EAAccessory *accessory in [[EAAccessoryManager sharedAccessoryManager] connectedAccessories])
@@ -68,8 +78,10 @@ THE SOFTWARE.
     [[EAAccessoryManager sharedAccessoryManager] unregisterForLocalNotifications];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidConnectNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidDisconnectNotification object:nil];
-    
     [[NSNotificationCenter defaultCenter] removeObserver:self name:RALBatteryConnectedNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationWillTerminateNotification object:nil];
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
     
     [self.session.outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
     
@@ -85,16 +97,18 @@ THE SOFTWARE.
     if(_autoConnectMode == autoConnectMode) return;
     _autoConnectMode = autoConnectMode;
     if (autoConnectMode) {
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(batteryDidConnectNotification:) name:RALBatteryConnectedNotification object:nil];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(batteryDidConnectNotification:) name:RALBatteryConnectedNotification object:nil];
         
-        if(!self.connected) for(EAAccessory *accessory in [[EAAccessoryManager sharedAccessoryManager] connectedAccessories])
-        {
-            [self accessoryDidConnectNotification:[NSNotification notificationWithName:EAAccessoryDidConnectNotification object:self userInfo:@{EAAccessoryKey:accessory}]];
-        }
-        else
-        {
-            [self startCharging];
-        }
+            if(!self.connected) for(EAAccessory *accessory in [[EAAccessoryManager sharedAccessoryManager] connectedAccessories])
+            {
+                [self accessoryDidConnectNotification:[NSNotification notificationWithName:EAAccessoryDidConnectNotification object:self userInfo:@{EAAccessoryKey:accessory}]];
+            }
+            else
+            {
+                [self startCharging];
+            }
+        });
     }
     else
     {
@@ -122,11 +136,6 @@ THE SOFTWARE.
 - (BOOL) stopCharging
 {
     return [self setCharging:NO];
-}
-
-- (void)start
-{
-    /* dummy, just to make sure sbd runs + sharedController */
 }
 
 + (instancetype) sharedController
@@ -162,7 +171,6 @@ THE SOFTWARE.
 
 
 #pragma mark - Notifications
-
 
 - (void) accessoryDidConnectNotification : (NSNotification *) notification
 {
@@ -220,20 +228,33 @@ THE SOFTWARE.
     }
 }
 
+- (void)applicationDidEnterBackgroundNotification: (NSNotification *) notification {
+    if(self.currentAccessory == nil) return;
+    if(self.event!=NSStreamEventHasSpaceAvailable) return;
+    if(!_isConnected) return;
+    
+    uint8_t byteBuffer[1];
+    byteBuffer[0] =  'f';
+    
+    [self.session.outputStream write:byteBuffer maxLength:1];
+}
+
+- (void) batteryDidConnectNotification: (NSNotification *) note
+{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self startCharging];
+    });
+}
+
+- (void) applicationWillTerminateNotification: (NSNotification *) note {
+    [self stopCharging];
+}
+
 #pragma mark - NSStreamDelegate
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
     self.event = eventCode;
-}
-
-
-#pragma mark - Notifications
-
-- (void) batteryDidConnectNotification: (NSNotification *) note
-{
-    [self startCharging];
-    
 }
 
 

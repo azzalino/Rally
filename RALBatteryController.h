@@ -1,6 +1,6 @@
 /*  
 
-Copyright (c) 2015-2016 PowerIT, Inc. Company
+Copyright (c) 2015-2017 PowerIT, Inc. Company
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -50,11 +50,14 @@ static NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconnectedNo
  */
 - (BOOL) stopCharging;
 
+/** Starts monitoring the external accessory actions. 
+  * Run this method in the AppDelegate's didFinishLaunchingWithOptions:
+  * No notifications are being dispatched before the controller is initialised.
+  */
+- (void) initialize;
+
 /// Returns the singleton instance. The class should be operated on as a singleton only.
 + (instancetype) sharedController;
-
-/** Starts the manager. This should be run before any usage. It can be run many times, though. */
-- (void) start;
 
 /// Allows access to the current accessory details (e.g. serial number)
 @property (readonly) EAAccessory *currentAccessory;
