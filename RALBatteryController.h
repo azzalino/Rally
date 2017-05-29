@@ -50,6 +50,17 @@ static NSString *RALBatteryDisconnectedNotification = @"RALBatteryDisconnectedNo
  */
 - (BOOL) stopCharging;
 
+
+/** Sends warning event to the device
+ * @return YES if all went ok, otherwise NO
+ */
+- (BOOL) sendWarning;
+
+/** Sends stop event for warning event to the device
+ * @return YES if all went ok, otherwise NO
+ */
+- (BOOL) sendStopChargingWithWarning;
+
 /** Starts monitoring the external accessory actions. 
   * Run this method in the AppDelegate's didFinishLaunchingWithOptions:
   * No notifications are being dispatched before the controller is initialised.
