@@ -23,6 +23,19 @@ THE SOFTWARE.
 */
 
 #import "RALBatteryController.h"
+#import "RALExtendedOperation.h"
+
+static uint8_t const kRALBatteryControllerSignalStopAndReset = 'c';
+static uint8_t const kRALBatteryControllerSignalStart = 'b';
+static uint8_t const kRALBatteryControllerSignalWarningStart = 'd';
+static uint8_t const kRALBatteryControllerSignalWarningStop = 'g';
+static uint8_t const kRALBatteryControllerSignalForeground = 'e';
+static uint8_t const kRALBatteryControllerSignalBackground = 'f';
+
+
+static NSTimeInterval const kRALBatteryControllerInitialCommunicationDelay = 0.5;
+static NSTimeInterval const kRALBatteryControllerBackgroundEventDelay = 0.5;
+
 
 @interface RALBatteryController()<NSStreamDelegate>
 {
@@ -35,6 +48,8 @@ THE SOFTWARE.
 @property (strong, nonatomic) EASession *session;
 
 @property (nonatomic, assign) NSStreamEvent event;
+// queue used to send raw bytes to the battery
+@property (nonatomic, strong) NSOperationQueue *streamCommunicationQueue;
 
 @end
 
@@ -53,12 +68,15 @@ THE SOFTWARE.
     self = [super init];
     if(self)
     {
+        self.streamCommunicationQueue = [[NSOperationQueue alloc] init];
+        
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(accessoryDidConnectNotification:) name:EAAccessoryDidConnectNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(accessoryDidDisconnectNotification:) name:EAAccessoryDidDisconnectNotification object:nil];
         
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillTerminateNotification:) name:UIApplicationWillTerminateNotification object:nil];
         
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidEnterBackgroundNotification:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillEnterForegroundNotification:) name:UIApplicationWillEnterForegroundNotification object:nil];
         
         
         
@@ -76,12 +94,7 @@ THE SOFTWARE.
 - (void)dealloc
 {
     [[EAAccessoryManager sharedAccessoryManager] unregisterForLocalNotifications];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidConnectNotification object:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:EAAccessoryDidDisconnectNotification object:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:RALBatteryConnectedNotification object:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationWillTerminateNotification object:nil];
-    
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     
     [self.session.outputStream removeFromRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
     
@@ -138,6 +151,29 @@ THE SOFTWARE.
     return [self setCharging:NO];
 }
 
+- (BOOL) sendWarning
+{
+    return [self sendCharacter: kRALBatteryControllerSignalWarningStart];
+}
+
+- (BOOL) sendStopChargingWithWarning
+{
+    return [self sendCharacter: kRALBatteryControllerSignalWarningStop];
+}
+
+- (BOOL) sendReset
+{
+    return [self sendCharacter: kRALBatteryControllerSignalStopAndReset];
+}
+
+/**
+ Sends reset signal synchronously on a current thread
+ */
+- (void) sendResetImmediately
+{
+    [self sendCharacterImmediately: kRALBatteryControllerSignalStopAndReset];
+}
+
 + (instancetype) sharedController
 {
     static dispatch_once_t onceToken;
@@ -149,26 +185,60 @@ THE SOFTWARE.
 }
 #pragma mark - Helpers
 
-- (BOOL) setCharging: (BOOL) on
-{
-    if(self.currentAccessory == nil) return NO;
-    if(self.event!=NSStreamEventHasSpaceAvailable) return NO;
-    if(!_isConnected) return NO;
-    if(_isCharging && on) return NO;
-    if(!_isCharging && !on) return NO;
+- (BOOL) sendCharacter: (uint8_t)character{
+    if (![self streamReadyToSend]){
+        return NO;
+    }
     
+    // access to outputStream has to be only done from runloop that given stream is scheduled (here main queue)
+    RALExtendedOperation *operation = [[RALExtendedOperation alloc] initWithBlock:^{
+        [self sendCharacterImmediately:character];
+    } extensionDuration:0.5 queue:dispatch_get_main_queue()];
+
+    for (NSOperation *queueOperaion in [self.streamCommunicationQueue operations]) {
+        [operation addDependency:queueOperaion];
+    }
     
+    [self.streamCommunicationQueue addOperation:operation];
+    return YES;
+}
+
+- (void) sendCharacterImmediately: (uint8_t)character{
     uint8_t byteBuffer[1];
-    byteBuffer[0] = _isCharging ? 'c' : 'b';
+    byteBuffer[0] = character;
     
     [self.session.outputStream write:byteBuffer maxLength:1];
+}
+
+- (BOOL) setCharging: (BOOL) on
+{
+    if (![self streamReadyToSend]) return NO;
+    if(_isCharging == on) return NO;
+    
+    
+    [self sendCharacter: on ? kRALBatteryControllerSignalStart : kRALBatteryControllerSignalStopAndReset];
     [self willChangeValueForKey:@"charging"];
     _isCharging = on;
     [self willChangeValueForKey:@"charging"];
     return YES;
 }
 
+/**
+ Informs if output stream is ready to send data to accessory
 
+ @return YES for ready stream, NO otherwise
+ */
+- (BOOL) streamReadyToSend {
+    if(self.currentAccessory == nil) return NO;
+    if(self.event!=NSStreamEventHasSpaceAvailable) return NO;
+    if(!_isConnected) return NO;
+    
+    return YES;
+}
+
+- (void) lockOutputStreamForDuration:(NSTimeInterval)delay{
+    [self.streamCommunicationQueue addOperation:[[RALExtendedOperation alloc]initWithBlock:^{} extensionDuration:delay queue:dispatch_get_main_queue()]];
+}
 
 #pragma mark - Notifications
 
@@ -184,8 +254,10 @@ THE SOFTWARE.
         
         if (self.session)
         {
+            [self lockOutputStreamForDuration: kRALBatteryControllerInitialCommunicationDelay];
+            
             [[self.session outputStream] open];
-            [self.session.outputStream scheduleInRunLoop:[NSRunLoop currentRunLoop]
+            [self.session.outputStream scheduleInRunLoop:[NSRunLoop mainRunLoop]
                                                  forMode:NSDefaultRunLoopMode];
             self.session.outputStream.delegate = self;
             [self willChangeValueForKey:@"connected"];
@@ -209,6 +281,8 @@ THE SOFTWARE.
 {
     if([notification.userInfo[EAAccessoryKey] isEqual:self.currentAccessory])
     {
+        [self.streamCommunicationQueue cancelAllOperations];
+        
         [self willChangeValueForKey:@"currentAccessory"];
         _currentAccessory = nil;
         [self didChangeValueForKey:@"currentAccessory"];
@@ -229,14 +303,13 @@ THE SOFTWARE.
 }
 
 - (void)applicationDidEnterBackgroundNotification: (NSNotification *) notification {
-    if(self.currentAccessory == nil) return;
-    if(self.event!=NSStreamEventHasSpaceAvailable) return;
-    if(!_isConnected) return;
+    [self lockOutputStreamForDuration:kRALBatteryControllerBackgroundEventDelay];
     
-    uint8_t byteBuffer[1];
-    byteBuffer[0] =  'f';
-    
-    [self.session.outputStream write:byteBuffer maxLength:1];
+    [self sendCharacter: kRALBatteryControllerSignalBackground];
+}
+
+- (void)applicationWillEnterForegroundNotification: (NSNotification *) notification {
+    [self sendCharacter: kRALBatteryControllerSignalForeground];
 }
 
 - (void) batteryDidConnectNotification: (NSNotification *) note
@@ -247,7 +320,8 @@ THE SOFTWARE.
 }
 
 - (void) applicationWillTerminateNotification: (NSNotification *) note {
-    [self stopCharging];
+    // quickly send reset signal before termination
+    [self sendResetImmediately];
 }
 
 #pragma mark - NSStreamDelegate
