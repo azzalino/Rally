@@ -1,0 +1,6 @@
+framework module Rally {
+  umbrella header "Rally-umbrella.h"
+
+  export *
+  module * { export * }
+}
