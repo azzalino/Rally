@@ -30,7 +30,7 @@ static uint8_t const kRALBatteryControllerSignalStart = 'b';
 static uint8_t const kRALBatteryControllerSignalWarningStart = 'd';
 static uint8_t const kRALBatteryControllerSignalWarningStop = 'g';
 static uint8_t const kRALBatteryControllerSignalForeground = 'e';
-static uint8_t const kRALBatteryControllerSignalBackground = 'f';
+static uint8_t const kRALBatteryControllerSignalBackground = 'h';
 
 
 static NSTimeInterval const kRALBatteryControllerInitialCommunicationDelay = 0.5;
