@@ -68,7 +68,7 @@ class ViewController: UIViewController {
             showAlert(withBody: "No charger connected")
             return
         }
-        logInfo("Sending start charing")
+        logInfo("Sending start charging")
         battery.startCharging()
     }
     
@@ -78,7 +78,7 @@ class ViewController: UIViewController {
             return
         }
         
-        logInfo("Sending stop charing")
+        logInfo("Sending stop charging")
         battery.stopCharging()
     }
     
