@@ -1,6 +1,0 @@
-framework module Pods_RallyExample {
-  umbrella header "Pods-RallyExample-umbrella.h"
-
-  export *
-  module * { export * }
-}
