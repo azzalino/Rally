@@ -1,6 +1,0 @@
-framework module UIForLumberjack {
-  umbrella header "UIForLumberjack-umbrella.h"
-
-  export *
-  module * { export * }
-}
